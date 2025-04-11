@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>e-Yantra Biometric Attendance System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #fff;
+        }
+
+        h1,
+        h2 {
+            text-align: center;
+            color: #00ff88;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+        }
+
+        .box {
+            flex: 1 1 300px;
+            background: #0f3460;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+        }
+
+        button {
+            background-color: #00ff88;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #02d374;
+        }
+
+        table {
+            width: 100%;
+            margin-top: 10px;
+            border-collapse: collapse;
+            background-color: #1a1a2e;
+        }
+
+        th,
+        td {
+            border: 1px solid #00ff88;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #00ff88;
+            color: #000;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        #clock {
+            text-align: center;
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #ffeb3b;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🔐 e-Yantra Biometric Attendance System</h1>
+    <div id="clock"></div>
+
+    <div class="container">
+        <div class="box">
+            <h2>📝 Student Registration</h2>
+            <label for="regName">Full Name</label>
+            <input type="text" id="regName" placeholder="e.g., Aryan Sharma">
+
+            <label for="regID">Student ID</label>
+            <input type="text" id="regID" placeholder="e.g., EYANTRA2025">
+
+            <label for="regDept">Department</label>
+            <input type="text" id="regDept" placeholder="e.g., CSE">
+
+            <label for="regYear">Year</label>
+            <select id="regYear">
+                <option value="">Select Year</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+            </select>
+
+            <button onclick="registerStudent()">Register Student</button>
+            <div class="status" id="regStatus"></div>
+        </div>
+
+        <div class="box">
+            <h2>🔍 Attendance Marking</h2>
+            <button onclick="markAttendance()">📲 Scan Fingerprint</button>
+            <div class="status" id="attStatus"></div>
+        </div>
+
+        <div class="box">
+            <h2>📋 Student Dashboard</h2>
+            <p><strong>Name:</strong> <span id="dashName">-</span></p>
+            <p><strong>ID:</strong> <span id="dashID">-</span></p>
+            <p><strong>Department:</strong> <span id="dashDept">-</span></p>
+            <p><strong>Year:</strong> <span id="dashYear">-</span></p>
+            <h3>📆 Attendance History</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="attTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="box" style="margin-top: 30px;">
+        <h2>📚 All Registered Students</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>ID</th>
+                    <th>Department</th>
+                    <th>Year</th>
+                </tr>
+            </thead>
+            <tbody id="studentTable"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let db;
+        const request = indexedDB.open("BiometricAttendanceDB", 1);
+
+        request.onupgradeneeded = function (event) {
+            db = event.target.result;
+            const studentStore = db.createObjectStore("students", { keyPath: "id" });
+            studentStore.createIndex("name", "name", { unique: false });
+
+            const attendanceStore = db.createObjectStore("attendance", { autoIncrement: true });
+            attendanceStore.createIndex("studentId", "studentId", { unique: false });
+        };
+
+        request.onsuccess = function (event) {
+            db = event.target.result;
+            loadStudentTable();
+        };
+
+        request.onerror = function (event) {
+            console.error("DB Error", event.target.errorCode);
+        };
+
+        function registerStudent() {
+            const name = document.getElementById('regName').value.trim();
+            const id = document.getElementById('regID').value.trim();
+            const dept = document.getElementById('regDept').value.trim();
+            const year = document.getElementById('regYear').value;
+            const status = document.getElementById('regStatus');
+
+            if (!name || !id || !dept || !year) {
+                status.textContent = "Please fill all fields.";
+                status.style.color = "orange";
+                return;
+            }
+
+            const tx = db.transaction(["students"], "readwrite");
+            const store = tx.objectStore("students");
+
+            const req = store.add({ id, name, dept, year });
+
+            req.onsuccess = () => {
+                status.textContent = "Student registered successfully!";
+                status.style.color = "#00ff88";
+                document.getElementById('dashName').textContent = name;
+                document.getElementById('dashID').textContent = id;
+                document.getElementById('dashDept').textContent = dept;
+                document.getElementById('dashYear').textContent = year;
+                loadStudentTable();
+            };
+
+            req.onerror = () => {
+                status.textContent = "Student ID already exists!";
+                status.style.color = "red";
+            };
+        }
+
+        function markAttendance() {
+            const id = prompt("Enter your Student ID:");
+            const status = document.getElementById("attStatus");
+
+            if (!id) {
+                status.textContent = "No ID entered.";
+                status.style.color = "orange";
+                return;
+            }
+
+            const tx = db.transaction(["students"], "readonly");
+            const store = tx.objectStore("students");
+            const req = store.get(id);
+
+            req.onsuccess = function () {
+                const student = req.result;
+                if (!student) {
+                    status.textContent = "Student not found!";
+                    status.style.color = "red";
+                    return;
+                }
+
+                status.textContent = "Scanning fingerprint...";
+                status.style.color = "#ffeb3b";
+
+                setTimeout(() => {
+                    const present = Math.random() > 0.1;
+                    const today = new Date().toISOString().split('T')[0];
+
+                    const tx2 = db.transaction(["attendance"], "readwrite");
+                    const attStore = tx2.objectStore("attendance");
+                    attStore.add({ studentId: id, date: today, status: present ? "Present" : "Absent" });
+
+                    status.textContent = present ? "Attendance marked!" : "Fingerprint not recognized.";
+                    status.style.color = present ? "#00ff88" : "#ff4d4d";
+
+                    loadDashboard(id);
+                }, 2000);
+            };
+        }
+
+        function loadDashboard(id) {
+            const tx1 = db.transaction(["students"], "readonly");
+            const store = tx1.objectStore("students");
+            const req = store.get(id);
+
+            req.onsuccess = () => {
+                const s = req.result;
+                if (s) {
+                    document.getElementById('dashName').textContent = s.name;
+                    document.getElementById('dashID').textContent = s.id;
+                    document.getElementById('dashDept').textContent = s.dept;
+                    document.getElementById('dashYear').textContent = s.year;
+                }
+            };
+
+            const tx2 = db.transaction(["attendance"], "readonly");
+            const attStore = tx2.objectStore("attendance");
+            const index = attStore.index("studentId");
+            const range = IDBKeyRange.only(id);
+
+            document.getElementById("attTable").innerHTML = "";
+
+            index.openCursor(range).onsuccess = function (e) {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const { date, status } = cursor.value;
+                    document.getElementById("attTable").innerHTML += `<tr><td>${date}</td><td>${status}</td></tr>`;
+                    cursor.continue();
+                }
+            };
+        }
+
+        function loadStudentTable() {
+            const tx = db.transaction(["students"], "readonly");
+            const store = tx.objectStore("students");
+
+            document.getElementById("studentTable").innerHTML = "";
+
+            store.openCursor().onsuccess = function (e) {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const { name, id, dept, year } = cursor.value;
+                    document.getElementById("studentTable").innerHTML += `
+          <tr>
+            <td>${name}</td>
+            <td>${id}</td>
+            <td>${dept}</td>
+            <td>${year}</td>
+          </tr>`;
+                    cursor.continue();
+                }
+            };
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById("clock").textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+    </script>
+
+</body>
+
+</html>
